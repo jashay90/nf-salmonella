@@ -2,15 +2,16 @@
 process SIMPLECAT {
     label "process_low"
     input:
+    val tool
     path header
     path files
 
     output:
-    path "combined.tsv"
+    path "${tool}_combined.tsv"
 
     script:
     """
-        cat ${header} ${files} > combined.tsv
+        cat ${header} ${files} > ${tool}_combined.tsv
     """
 }
 

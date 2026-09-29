@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl = 2
+nextflow.preview.topic=true
+
 include { SISTR } from './modules/nf-core/sistr/main'
 include { MLST } from './modules/nf-core/mlst/main'
 include { ADDIDCOLUMN as SISTRADDID } from './modules/addidcolumn.nf'
@@ -72,17 +74,16 @@ process ABRICATE {
 
 process ABRICATEMERGE {
 	tag "merging abricate results"
-	label "process_low"
 	label "abricate"
 	input:
 	path files
 
 	output:
-	path "combined.tsv"
+	path "abricate_combined.tsv"
 
 	script:
 	"""
-	abricate --summary ${files} > combined.tsv
+	abricate --summary ${files} > abricate_combined.tsv
 	"""
 }
 
@@ -112,7 +113,7 @@ process MOBSUITE {
 	output:
 	path("${fasta.simpleName}/contig_report.txt") // just confirming this exists
 	tuple val(meta), path("${fasta.simpleName}/mobtyper_results.txt"), optional: true, emit: mobsuite
-	tuple val("${task.process}"), val('mob_recon'), eval("mob_recon -h | grep version | sed 's/.*\s//'"), emit: versions_mobsuite, topic: versions
+	tuple val("${task.process}"), val('mob_recon'), eval("mob_recon -h | grep version | sed 's/.*\s//' | head -1"), emit: versions_mobsuite, topic: versions
 
 	script:
 	"""
@@ -120,9 +121,10 @@ process MOBSUITE {
 	"""
 }
 
-process SUMMARY {
+process GENERATESUMMARY {
 	tag "creating a summary file"
 	label "process_low"
+	publishDir "${params.outdir}", pattern: "summary_report.xlsx"
 	input:
 	path(sistr)
 	path(mlst)
@@ -136,11 +138,11 @@ process SUMMARY {
 	path(params)
 
 	output:
-	path("summary.xlsx")
+	path("summary_report.xlsx")
 
 	script:
 	"""
-	
+	generate_summary.py --sistr ${sistr} --mlst ${mlst} --res ${res} --point ${point} --spi ${spi} --abricate ${abricate} --seqsero ${seqsero} --mob ${mob} --params ${params} --versions ${versions} --output summary_report.xlsx
 	"""
 }
 
@@ -154,32 +156,34 @@ workflow {
 		}
 	
 	SISTR(genome_ch)
-	sistr = SISTRMERGE(sortByID(SISTRADDID(SISTR.out.tsv)))
+	sistr = SISTRMERGE('sistr', sortByID(SISTRADDID(SISTR.out.tsv)))
 	
 	MLST(genome_ch)
-	mlst = MLSTMERGE(file(params.mlst_header, checkIfExists: true), sortByID(MLST.out.tsv))
+	mlst = MLSTMERGE('mlst', file(params.mlst_header, checkIfExists: true), sortByID(MLST.out.tsv))
 	
 	RESFINDER(genome_ch)
 	RESFINDERHEADER(RESFINDER.out.resfinder)
-	res = RESFINDERMERGE([], sortByID(RESFINDERHEADER.out))
+	res = RESFINDERMERGE('res', [], sortByID(RESFINDERHEADER.out))
 	POINTFINDERHEADER(RESFINDER.out.pointfinder)
-	point = POINTFINDERMERGE([], sortByID(POINTFINDERHEADER.out))
+	point = POINTFINDERMERGE('point', [], sortByID(POINTFINDERHEADER.out))
 	
 	SPIFINDER(genome_ch)
 	SPIFINDERHEADER(SPIFINDER.out.spifinder)
-	spi = SPIFINDERMERGE([], sortByID(SPIFINDERHEADER.out))
+	spi = SPIFINDERMERGE('spi', [], sortByID(SPIFINDERHEADER.out))
 	
 	ABRICATE(genome_ch)
 	abricate = ABRICATEMERGE(sortByID(ABRICATE.out.abricate))
 	
 	SEQSERO2(genome_ch)
-	seqsero = SEQSEROMERGE(sortByID(SEQSERO2.out.seqsero))
+	seqsero = SEQSEROMERGE('seqsero', sortByID(SEQSERO2.out.seqsero))
 	
 	MOBSUITE(genome_ch)
 	MOBADDHEADER(MOBSUITE.out.mobsuite)
-	mob = MOBMERGE([], sortByID(MOBADDHEADER.out))
+	mob = MOBMERGE('mob', [], sortByID(MOBADDHEADER.out))
 	
 	// make json metadata files
         ch_versions = Channel.topic('versions').unique()
         WRITE_JSONS(ch_versions.collect(flat: false))
+
+	GENERATESUMMARY(sistr, mlst, res, point, spi, abricate, seqsero, mob, WRITE_JSONS.out.vjson, WRITE_JSONS.out.pjson)
 }
