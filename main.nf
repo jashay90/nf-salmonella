@@ -15,6 +15,7 @@ include { SIMPLECAT as SPIFINDERMERGE } from './modules/simplecat.nf'
 include { CONCISEMERGE as SEQSEROMERGE } from './modules/concisemerge.nf'
 include { ADDHEADER as MOBADDHEADER } from './modules/addheader.nf'
 include { SIMPLECAT as MOBMERGE } from './modules/simplecat.nf'
+include { WRITE_JSONS } from './modules/write_jsons.nf'
 include { sortByID } from './lib/utils.nf'
 
 process RESFINDER {
@@ -119,6 +120,30 @@ process MOBSUITE {
 	"""
 }
 
+process SUMMARY {
+	tag "creating a summary file"
+	label "process_low"
+	input:
+	path(sistr)
+	path(mlst)
+	path(res)
+	path(point)
+	path(spi)
+	path(abricate)
+	path(seqsero)
+	path(mob)
+	path(versions)
+	path(params)
+
+	output:
+	path("summary.xlsx")
+
+	script:
+	"""
+	
+	"""
+}
+
 params.genomes = null
 params.outdir = "results"
 
@@ -129,29 +154,32 @@ workflow {
 		}
 	
 	SISTR(genome_ch)
-	SISTRMERGE(sortByID(SISTRADDID(SISTR.out.tsv)))
+	sistr = SISTRMERGE(sortByID(SISTRADDID(SISTR.out.tsv)))
 	
 	MLST(genome_ch)
-	MLSTMERGE(file(params.mlst_header, checkIfExists: true), sortByID(MLST.out.tsv))
+	mlst = MLSTMERGE(file(params.mlst_header, checkIfExists: true), sortByID(MLST.out.tsv))
 	
 	RESFINDER(genome_ch)
 	RESFINDERHEADER(RESFINDER.out.resfinder)
-	RESFINDERMERGE([], sortByID(RESFINDERHEADER.out))
+	res = RESFINDERMERGE([], sortByID(RESFINDERHEADER.out))
 	POINTFINDERHEADER(RESFINDER.out.pointfinder)
-	POINTFINDERMERGE([], sortByID(POINTFINDERHEADER.out))
+	point = POINTFINDERMERGE([], sortByID(POINTFINDERHEADER.out))
 	
 	SPIFINDER(genome_ch)
 	SPIFINDERHEADER(SPIFINDER.out.spifinder)
-	SPIFINDERMERGE([], sortByID(SPIFINDERHEADER.out))
+	spi = SPIFINDERMERGE([], sortByID(SPIFINDERHEADER.out))
 	
 	ABRICATE(genome_ch)
-	ABRICATEMERGE(sortByID(ABRICATE.out.abricate))
+	abricate = ABRICATEMERGE(sortByID(ABRICATE.out.abricate))
 	
 	SEQSERO2(genome_ch)
-	SEQSEROMERGE(sortByID(SEQSERO2.out.seqsero))
+	seqsero = SEQSEROMERGE(sortByID(SEQSERO2.out.seqsero))
 	
 	MOBSUITE(genome_ch)
 	MOBADDHEADER(MOBSUITE.out.mobsuite)
-	MOBMERGE([], sortByID(MOBADDHEADER.out))
+	mob = MOBMERGE([], sortByID(MOBADDHEADER.out))
 	
+	// make json metadata files
+        ch_versions = Channel.topic('versions').unique()
+        WRITE_JSONS(ch_versions.collect(flat: false))
 }
