@@ -80,10 +80,10 @@ def main():
             if path is None:
                 continue
             try:
-                df = pd.read_csv(path, sep=args.sep, header=0, names=emptyheader(path, args.sep))
+                df = pd.read_csv(path, sep=args.sep, header=None, names=emptyheader(path, args.sep))
             except:
                 continue
-            df.to_excel(writer, sheet_name=tab, index=False)
+            df.to_excel(writer, sheet_name=tab, index=False, header=False)
             ws[flag] = writer.sheets[tab]
             makepretty(ws[flag])
 
