@@ -135,14 +135,14 @@ process GENERATESUMMARY {
 	path(seqsero)
 	path(mob)
 	path(versions)
-	path(params)
+	path(params_file)
 
 	output:
 	path("summary_report.xlsx")
 
 	script:
 	"""
-	generate_summary.py --sistr ${sistr} --mlst ${mlst} --res ${res} --point ${point} --spi ${spi} --abricate ${abricate} --seqsero ${seqsero} --mob ${mob} --params ${params} --versions ${versions} --output summary_report.xlsx
+	generate_summary.py --sistr ${sistr} --mlst ${mlst} --res ${res} --point ${point} --spi ${spi} --abricate ${abricate} --seqsero ${seqsero} --mob ${mob} --params ${params_file} --versions ${versions} --output summary_report.xlsx
 	"""
 }
 
