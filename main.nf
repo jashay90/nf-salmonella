@@ -33,7 +33,7 @@ process RESFINDER {
 
 	script:
 	"""
-	python3 -m resfinder -o ${fasta.simpleName} -ifa ${fasta} -db_res ${params.resfinder_db} --acquired -s "Salmonella enterica" -l 0.6 -t 0.9 --point -db_point ${params.pointfinder_db} -l_p 0.6 -t_p 0.9
+	python3 -m resfinder -o ${fasta.simpleName} -ifa ${fasta} -db_res ${params.resfinder_db} --acquired --point -db_point ${params.pointfinder_db} ${params.resfinder_params}
 	"""
 }
 
@@ -50,7 +50,7 @@ process SPIFINDER {
         script:
         """
 	mkdir ${fasta.simpleName}
-	python3 ${params.spifinder_py} -i ${fasta} -o ${fasta.simpleName} -p ${params.spifinder_db} -l 0.6 -t 0.9 -x
+	python3 ${params.spifinder_py} -i ${fasta} -o ${fasta.simpleName} -p ${params.spifinder_db} ${params.spifinder_params}
         """
 
 }
@@ -68,7 +68,7 @@ process ABRICATE {
 
 	script:
 	"""
-	abricate --db vfdb --threads ${task.cpus} ${fasta} > ${meta.id}_results.tab
+	abricate --threads ${task.cpus} ${params.abricate_params} ${fasta} > ${meta.id}_results.tab
 	"""
 }
 
@@ -99,7 +99,7 @@ process SEQSERO2 {
 
 	script:
 	"""
-	SeqSero2_package.py -m k -t 4 -i ${fasta} -d ${fasta.simpleName}
+	SeqSero2_package.py -i ${fasta} -d ${fasta.simpleName} ${params.seqsero_params}
 	mv ${fasta.simpleName}/SeqSero_result.tsv ${fasta.simpleName}/${fasta.simpleName}_SeqSero_result.tsv
 	"""
 }
@@ -117,14 +117,44 @@ process MOBSUITE {
 
 	script:
 	"""
-	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} -f --min_con_cov 90 --min_mob_cov 90 --min_rep_cov 90
+	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} ${params.mobsuite_params}
+	"""
+}
+
+process GRABMLST {
+	tag "extracting MLST for ${meta.id}"
+	label "process_low"
+	publishDir "${params.outdir}/mlst", pattern: "*_mlst.txt"
+	input:
+	tuple val(meta), path(tsv)
+	output:
+	path("${meta.id}_mlst.txt")
+
+	script:
+	"""
+	awk -F "\t" '{print \$3}' ${tsv} > ${meta.id}_mlst.txt
+	"""
+}
+
+process GRABSEROVAR {
+	tag "extracting serovar for ${meta.id}"
+	label "process_low"
+	publishDir "${params.outdir}/serovar", pattern: "*_serovar.txt"
+	input:
+	tuple val(meta), path(tsv)
+	output:
+	path("${meta.id}_serovar.txt")
+
+	script:
+	"""
+	tail -1 ${tsv} | awk -F "\t" '{print \$15}' > ${meta.id}_serovar.txt
 	"""
 }
 
 process GENERATESUMMARY {
 	tag "creating a summary file"
 	label "process_low"
-	publishDir "${params.outdir}", pattern: "summary_report.xlsx"
+	publishDir "${params.outdir}", pattern: "summary_report.xlsx", mode: 'copy'
 	input:
 	path(sistr)
 	path(mlst)
@@ -156,10 +186,14 @@ workflow {
 		}
 	
 	SISTR(genome_ch)
-	sistr = SISTRMERGE('sistr', sortByID(SISTRADDID(SISTR.out.tsv)))
+	sistrtsv = SISTR.out.tsv
+	GRABSEROVAR(sistrtsv)
+	sistr = SISTRMERGE('sistr', sortByID(SISTRADDID(sistrtsv)))
 	
 	MLST(genome_ch)
-	mlst = MLSTMERGE('mlst', file(params.mlst_header, checkIfExists: true), sortByID(MLST.out.tsv))
+	mlsttsv = MLST.out.tsv
+	GRABMLST(mlsttsv)
+	mlst = MLSTMERGE('mlst', file(params.mlst_header, checkIfExists: true), sortByID(mlsttsv))
 	
 	RESFINDER(genome_ch)
 	RESFINDERHEADER(RESFINDER.out.resfinder)
