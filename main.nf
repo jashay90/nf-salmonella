@@ -17,6 +17,7 @@ include { SIMPLECAT as SPIFINDERMERGE } from './modules/simplecat.nf'
 include { CONCISEMERGE as SEQSEROMERGE } from './modules/concisemerge.nf'
 include { ADDHEADER as MOBADDHEADER } from './modules/addheader.nf'
 include { SIMPLECAT as MOBMERGE } from './modules/simplecat.nf'
+include { CONCISEMERGE as MGEMERGE } from './modules/concisemerge.nf'
 include { WRITE_JSONS } from './modules/write_jsons.nf'
 include { sortByID } from './lib/utils.nf'
 
@@ -113,11 +114,13 @@ process MOBSUITE {
 	output:
 	path("${fasta.simpleName}/contig_report.txt") // just confirming this exists
 	tuple val(meta), path("${fasta.simpleName}/mobtyper_results.txt"), optional: true, emit: mobsuite
+	tuple val(meta), path("${fasta.simpleName}/${fasta.simpleName}.mge.report.txt"), optional:true, emit: mge
 	tuple val("${task.process}"), val('mob_recon'), eval("mob_recon -h | grep version | sed 's/.*\s//' | head -1"), emit: versions_mobsuite, topic: versions
 
 	script:
 	"""
 	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} ${params.mobsuite_params}
+	mv ${fasta.simpleName}/mge.report.txt ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
 	"""
 }
 
@@ -164,6 +167,7 @@ process GENERATESUMMARY {
 	path(abricate)
 	path(seqsero)
 	path(mob)
+	path(mge)
 	path(versions)
 	path(params_file)
 
@@ -172,7 +176,7 @@ process GENERATESUMMARY {
 
 	script:
 	"""
-	generate_summary.py --sistr ${sistr} --mlst ${mlst} --res ${res} --point ${point} --spi ${spi} --abricate ${abricate} --seqsero ${seqsero} --mob ${mob} --params ${params_file} --versions ${versions} --output summary_report.xlsx
+	generate_summary.py --sistr ${sistr} --mlst ${mlst} --res ${res} --point ${point} --spi ${spi} --abricate ${abricate} --seqsero ${seqsero} --mob ${mob} --mge ${mge} --params ${params_file} --versions ${versions} --output summary_report.xlsx
 	"""
 }
 
@@ -214,10 +218,11 @@ workflow {
 	MOBSUITE(genome_ch)
 	MOBADDHEADER(MOBSUITE.out.mobsuite)
 	mob = MOBMERGE('mob', [], sortByID(MOBADDHEADER.out))
+	mge = MGEMERGE('mge', sortByID(MOBSUITE.out.mge))
 	
 	// make json metadata files
         ch_versions = Channel.topic('versions').unique()
         WRITE_JSONS(ch_versions.collect(flat: false))
 
-	GENERATESUMMARY(sistr, mlst, res, point, spi, abricate, seqsero, mob, WRITE_JSONS.out.vjson, WRITE_JSONS.out.pjson)
+	GENERATESUMMARY(sistr, mlst, res, point, spi, abricate, seqsero, mob, mge, WRITE_JSONS.out.vjson, WRITE_JSONS.out.pjson)
 }

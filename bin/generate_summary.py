@@ -52,7 +52,8 @@ def main():
     "spi":      "SPIfinder",
     "abricate": "Abricate",
     "seqsero":  "SeqSero",
-    "mob":      "Mobsuite",
+    "mob":      "Mobsuite_summary",
+    "mge": "Mobsuite_mge",
     }
     parser = argparse.ArgumentParser()
     for flag, tab in tooltab.items():
