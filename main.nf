@@ -120,7 +120,9 @@ process MOBSUITE {
 	script:
 	"""
 	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} ${params.mobsuite_params}
-	mv ${fasta.simpleName}/mge.report.txt ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
+	if [ -f ${fasta.simpleName}/mge.report.txt ]; then
+		mv ${fasta.simpleName}/mge.report.txt ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
+	fi
 	"""
 }
 
