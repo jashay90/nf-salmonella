@@ -122,6 +122,7 @@ process MOBSUITE {
 	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} ${params.mobsuite_params}
 	if [ -f ${fasta.simpleName}/mge.report.txt ]; then
 		mv ${fasta.simpleName}/mge.report.txt ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
+		[ -n "\\\$(tail -c1 ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt)" ] && echo >> ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
 	fi
 	"""
 }
