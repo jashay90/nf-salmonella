@@ -1,5 +1,5 @@
 # Nextflow Pipeline for Salmonella Typing and Analysis
-A nextflow pipeline to run various analysis tools on a Salmonella genome, and to generate a summary XLSX report.
+A nextflow pipeline to run various analysis tools on a Salmonella genome, and to generate a summary XLSX report. Based on a pipeline by Annika Flint.
 
 ## Prerequisites
 In order to run this pipeline, you must have [conda](https://docs.conda.io/projects/conda/en/stable/index.html) and [nextflow](https://www.nextflow.io/docs/latest/index.html) installed. You also need to download the [SPIFinder tool](https://bitbucket.org/genomicepidemiology/spifinder).
