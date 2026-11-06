@@ -31,7 +31,8 @@ process RESFINDER {
 	tuple val(meta), path("${fasta.simpleName}/ResFinder_results_tab.txt"), emit: resfinder
 	tuple val(meta), path("${fasta.simpleName}/PointFinder_results.txt"), emit: pointfinder
 	tuple val("{task.process}"), val("resfinder"), eval("python -m resfinder -v"), emit: versions_resfinder, topic: versions
-
+	tuple val("{task.process}"), val("resfinder_db"), eval("git -C ${file(params.resfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_resfinder_db, topic: versions
+	tuple val("{task.process}"), val("pointfinder_db"), eval("git -C ${file(params.pointfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_pointfinder_db, topic: versions
 	script:
 	"""
 	python3 -m resfinder -o ${fasta.simpleName} -ifa ${fasta} -db_res ${params.resfinder_db} --acquired --point -db_point ${params.pointfinder_db} ${params.resfinder_params}
@@ -47,6 +48,7 @@ process SPIFINDER {
         output:
         tuple val(meta), path("${fasta.simpleName}/results_tab.tsv"), emit: spifinder
         tuple val("{task.process}"), val("spifinder"), eval("git -C ${file(params.spifinder_py).getParent()} log -n 1 --pretty=format:%cd"), emit: versions_spifinder, topic: versions
+	tuple val("{task.process}"), val("spifinder_db"), eval("git -C ${file(params.spifinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_spifinder_db, topic: versions
 
         script:
         """
@@ -66,10 +68,10 @@ process ABRICATE {
 	output:
 	tuple val(meta), path("${meta.id}_results.tab"), emit: abricate
 	tuple val("{task.process}"), val("abricate"), eval("abricate --version | sed 's/abricate\s//'"), emit: versions_abricate, topic: versions
-
+	tuple val("${task.process}"), val("abricate_db"), eval("abricate --list | grep ${params.abricate_db} | sed 's/.*\\s//'"), emit: versions_abricate_db, topic: versions
 	script:
 	"""
-	abricate --threads ${task.cpus} ${params.abricate_params} ${fasta} > ${meta.id}_results.tab
+	abricate --threads ${task.cpus} --db ${params.abricate_db} ${fasta} > ${meta.id}_results.tab
 	"""
 }
 
@@ -116,7 +118,7 @@ process MOBSUITE {
 	tuple val(meta), path("${fasta.simpleName}/mobtyper_results.txt"), optional: true, emit: mobsuite
 	tuple val(meta), path("${fasta.simpleName}/${fasta.simpleName}.mge.report.txt"), optional:true, emit: mge
 	tuple val("${task.process}"), val('mob_recon'), eval("mob_recon -h | grep version | sed 's/.*\s//' | head -1"), emit: versions_mobsuite, topic: versions
-
+	tuple val("${task.process}"), val('mob_recon_db'), eval('mob_db_download_date.sh'), emit: versions_mobsuite_db, topic: versions
 	script:
 	"""
 	mob_recon --infile ${fasta} --outdir ${fasta.simpleName} -n ${task.cpus} ${params.mobsuite_params}

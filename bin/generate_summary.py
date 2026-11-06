@@ -45,7 +45,7 @@ def makepretty(ws):
         
 def main():
     tooltab = {
-    "sistr":    "SISTR2",
+    "sistr":    "SISTR",
     "mlst":     "MLST",
     "res":      "Resfinder",
     "point":    "Pointfinder",
