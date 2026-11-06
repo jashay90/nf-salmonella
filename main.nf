@@ -8,6 +8,9 @@ include { ADDIDCOLUMN as SISTRADDID } from './modules/addidcolumn.nf'
 include { CONCISEMERGE as SISTRMERGE } from './modules/concisemerge.nf'
 include { ADDIDCOLUMN as MLSTADDID } from './modules/addidcolumn.nf'
 include { SIMPLECAT as MLSTMERGE } from './modules/simplecat.nf'
+include { ADDHEADER as MOBADDHEADER } from './modules/addheader.nf'
+include { SIMPLECAT as MOBMERGE } from './modules/simplecat.nf'
+include { CONCISEMERGE as MGEMERGE } from './modules/concisemerge.nf'
 include { ADDHEADER as RESFINDERHEADER } from './modules/addheader.nf'
 include { SIMPLECAT as RESFINDERMERGE } from './modules/simplecat.nf'
 include { ADDHEADER as POINTFINDERHEADER } from './modules/addheader.nf'
@@ -15,29 +18,9 @@ include { SIMPLECAT as POINTFINDERMERGE } from './modules/simplecat.nf'
 include { ADDHEADER as SPIFINDERHEADER } from './modules/addheader.nf'
 include { SIMPLECAT as SPIFINDERMERGE } from './modules/simplecat.nf'
 include { CONCISEMERGE as SEQSEROMERGE } from './modules/concisemerge.nf'
-include { ADDHEADER as MOBADDHEADER } from './modules/addheader.nf'
-include { SIMPLECAT as MOBMERGE } from './modules/simplecat.nf'
-include { CONCISEMERGE as MGEMERGE } from './modules/concisemerge.nf'
 include { WRITE_JSONS } from './modules/write_jsons.nf'
 include { sortByID } from './lib/utils.nf'
 
-process RESFINDER {
-	tag "running resfinder on ${meta.id}"
-	label "process_low"
-	input:
-	tuple val(meta), path(fasta)
-
-	output:
-	tuple val(meta), path("${fasta.simpleName}/ResFinder_results_tab.txt"), emit: resfinder
-	tuple val(meta), path("${fasta.simpleName}/PointFinder_results.txt"), emit: pointfinder
-	tuple val("{task.process}"), val("resfinder"), eval("python -m resfinder -v"), emit: versions_resfinder, topic: versions
-	tuple val("{task.process}"), val("resfinder_db"), eval("git -C ${file(params.resfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_resfinder_db, topic: versions
-	tuple val("{task.process}"), val("pointfinder_db"), eval("git -C ${file(params.pointfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_pointfinder_db, topic: versions
-	script:
-	"""
-	python3 -m resfinder -o ${fasta.simpleName} -ifa ${fasta} -db_res ${params.resfinder_db} --acquired --point -db_point ${params.pointfinder_db} ${params.resfinder_params}
-	"""
-}
 
 process SPIFINDER {
 	tag "running spifinder on ${meta.id}"
@@ -114,7 +97,7 @@ process MOBSUITE {
 	tuple val(meta), path(fasta)
 
 	output:
-	path("${fasta.simpleName}/contig_report.txt") // just confirming this exists
+	tuple val(meta), path("${fasta.simpleName}/contig_report.txt"), emit: contigreport
 	tuple val(meta), path("${fasta.simpleName}/mobtyper_results.txt"), optional: true, emit: mobsuite
 	tuple val(meta), path("${fasta.simpleName}/${fasta.simpleName}.mge.report.txt"), optional:true, emit: mge
 	tuple val("${task.process}"), val('mob_recon'), eval("mob_recon -h | grep version | sed 's/.*\s//' | head -1"), emit: versions_mobsuite, topic: versions
@@ -127,6 +110,40 @@ process MOBSUITE {
 		[ -n "\\\$(tail -c1 ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt)" ] && echo >> ${fasta.simpleName}/${fasta.simpleName}.mge.report.txt
 	fi
 	"""
+}
+
+process RESFINDER {
+	tag "running resfinder on ${meta.id}"
+	label "process_low"
+	input:
+	tuple val(meta), path(fasta)
+
+	output:
+	tuple val(meta), path("${fasta.simpleName}/ResFinder_results_tab.txt"), emit: resfinder
+	tuple val(meta), path("${fasta.simpleName}/PointFinder_results.txt"), emit: pointfinder
+	tuple val("{task.process}"), val("resfinder"), eval("python -m resfinder -v"), emit: versions_resfinder, topic: versions
+	tuple val("{task.process}"), val("resfinder_db"), eval("git -C ${file(params.resfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_resfinder_db, topic: versions
+	tuple val("{task.process}"), val("pointfinder_db"), eval("git -C ${file(params.pointfinder_db)} log -n 1 --pretty=format:%cd"), emit: versions_pointfinder_db, topic: versions
+	script:
+	"""
+	python3 -m resfinder -o ${fasta.simpleName} -ifa ${fasta} -db_res ${params.resfinder_db} --acquired --point -db_point ${params.pointfinder_db} ${params.resfinder_params}
+	"""
+}
+
+process MERGEWITHMOB {
+        tag "${meta.id}"
+        label "process_low"
+        label "pandas"
+        input:
+        tuple val(meta), path(resfinder), path(mobsuite)
+
+        output:
+        tuple val(meta), path("${meta.id}_resplusmob.tsv")
+
+        script:
+        """
+        mobplusresfinder.py -m ${mobsuite} -r ${resfinder} -o ${meta.id}_resplusmob.tsv
+        """
 }
 
 process GRABMLST {
@@ -162,6 +179,7 @@ process GRABSEROVAR {
 process GENERATESUMMARY {
 	tag "creating a summary file"
 	label "process_low"
+	label "pandas"
 	publishDir "${params.outdir}", pattern: "summary_report.xlsx", mode: 'copy'
 	input:
 	path(sistr)
@@ -204,8 +222,13 @@ workflow {
 	GRABMLST(mlsttsv)
 	mlst = MLSTMERGE('mlst', file(params.mlst_header, checkIfExists: true), sortByID(mlsttsv))
 	
+	MOBSUITE(genome_ch)
+	MOBADDHEADER(MOBSUITE.out.mobsuite)
+	mob = MOBMERGE('mob', [], sortByID(MOBADDHEADER.out))
+	mge = MGEMERGE('mge', sortByID(MOBSUITE.out.mge))
+		
 	RESFINDER(genome_ch)
-	RESFINDERHEADER(RESFINDER.out.resfinder)
+	RESFINDERHEADER(MERGEWITHMOB(RESFINDER.out.resfinder.join(MOBSUITE.out.contigreport)))
 	res = RESFINDERMERGE('res', [], sortByID(RESFINDERHEADER.out))
 	POINTFINDERHEADER(RESFINDER.out.pointfinder)
 	point = POINTFINDERMERGE('point', [], sortByID(POINTFINDERHEADER.out))
@@ -219,11 +242,6 @@ workflow {
 	
 	SEQSERO2(genome_ch)
 	seqsero = SEQSEROMERGE('seqsero', sortByID(SEQSERO2.out.seqsero))
-	
-	MOBSUITE(genome_ch)
-	MOBADDHEADER(MOBSUITE.out.mobsuite)
-	mob = MOBMERGE('mob', [], sortByID(MOBADDHEADER.out))
-	mge = MGEMERGE('mge', sortByID(MOBSUITE.out.mge))
 	
 	// make json metadata files
         ch_versions = Channel.topic('versions').unique()
